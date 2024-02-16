@@ -1,0 +1,22 @@
+{
+    "money": 0,
+    "level": 0,
+    "xp": 0,
+    "servers": [
+        "hobbyist"
+    ],
+    "upgrades": [
+        {
+            "name": "1.5x money",
+            "bought": false
+        },
+        {
+            "name": "higher rate limit",
+            "bought": 0
+        },
+        {
+            "name": "lower fail chance",
+            "bought": 0
+        }
+    ]
+}

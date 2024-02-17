@@ -18,5 +18,19 @@
             "name": "lower fail chance",
             "bought": 0
         }
+    ],
+    "workers": [
+        {
+            "name": "hobbyist",
+            "bought": 0
+        },
+        {
+            "name": "indie",
+            "bought": 0
+        },
+        {
+            "name": "indie studio",
+            "bought": 0
+        }
     ]
 }

@@ -48,9 +48,27 @@ const shopPages = {
             "exec": "json.upgrades.find(x => x.name == input).bought = 1;"
         }
     ],
+    "workers": [
+        {
+            "name": "hobbyist",
+            "cost": 1000,
+            "exec": "json.workers.find(x => x.name == input).bought = 1",
+        },
+        {
+            "name": "indie",
+            "cost": 5000,
+            "exec": "json.workers.find(x => x.name == input).bought = 1",
+        },
+        {
+            "name": "indie studio",
+            "cost": 10000,
+            "exec": "json.workers.find(x => x.name == input).bought = 1",
+        }
+    ],
     "includes": {
         "servers": `json.servers.includes(shopPages[id][object].name) ? colors.green : ""`,
-        "upgrades": `json.upgrades.find(x => x.name == shopPages[id][object].name).bought ? colors.green : ""`
+        "upgrades": `json.upgrades.find(x => x.name == shopPages[id][object].name).bought ? colors.green : ""`,
+        "workers": `json.workers.find(x => x.name == shopPages[id][object].name).bought ? colors.green : ""`,
     }
 }
 
@@ -68,7 +86,7 @@ const servers = [
     {
         "name": "indie studio",
         "description": "hack an indie studio.",
-        "value": "30, 50"
+        "value": "30,50"
     }
 ]
 
@@ -76,15 +94,7 @@ const saveJson = () => {
     fs.writeFileSync('./save.json', JSON.stringify(json));
 }
 
-// Create readline interface
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout
-});
-
-// Define your commands
-const commands = {
-  hack: async (args) => {
+async function hack(args) {
     const find = json.servers.find(x => x == args[0])
 
     if (find) {
@@ -97,16 +107,23 @@ const commands = {
             return;
         }
 
+        // decides how much money you should get
+        const money = pyrand.randint(parseInt(server.value.split(',')[0]), parseInt(server.value.split(',')[1]));
+
         const fail = pyrand.randint(1, 10)
         if (fail < failChance[json.upgrades.find(x => x.name == "lower fail chance").bought]) {
-            process.stdout.write('\x1Bc')
-            console.log("They caught you trying to hack them so you failed.")
+            if (args[1] != "worker") process.stdout.write('\x1Bc')
+            console.log(`They caught you trying to hack them so you failed. You lost ${money}.`)
+            console.log("")
+
+            json.money -= money
+            saveJson()
 
             return;
         }
 
         // checks if you should be rate limited
-        if (lastHacked.name == server.name && lastHacked.amount > rateLimits[json.upgrades.find(x => x.name == "higher rate limit").bought]) {
+        if (lastHacked.name == server.name && lastHacked.amount > rateLimits[json.upgrades.find(x => x.name == "higher rate limit").bought] && args[1] != "worker") {
             state = "ratelimit"
             console.log("The server is rate limiting you, wait 5 seconds.")
             await new Promise(resolve => setTimeout(resolve, 5000));
@@ -118,9 +135,6 @@ const commands = {
 
             return;
         }
-
-        // decides how much money you should get
-        const money = pyrand.randint(parseInt(server.value.split(',')[0]), parseInt(server.value.split(',')[1]));
 
         // adds the money and updates the json
         json.money += Math.round(money * (json.upgrades[0].bought == true ? 1.5 : 1));
@@ -139,7 +153,20 @@ const commands = {
 
         // logs how much youve hacked
         console.log(`You hacked ${server.name} and got £${money}`)
+        console.log("")
     };
+}
+
+// Create readline interface
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout
+});
+
+// Define your commands
+const commands = {
+  hack: async (args) => {
+    hack(args)
   },
   shop: async (args) => {
     state = "shopList"
@@ -193,11 +220,24 @@ const commands = {
                 return
             }
 
-            const findName = shopPages[id].find(x => x.name == input)
-
-            if (findName && json.servers.includes(findName)) {
+            const alreadyBought = () => {
+                process.stdout.write('\x1Bc'); 
                 console.log("Already bought.")
                 askBuy(id)
+
+                return
+            }
+
+            var findName;
+            
+            // checks if its already bought, this is so ugly
+            
+            if (Array.isArray(json[id][0])) {
+                findName = shopPages[id].find(x => x.name == input)
+                if (findName && json[id].includes(findName)) alreadyBought()
+            } else if (typeof json[id][0] == "object") {
+                findName = shopPages[id].find(x => x.name == input)
+                if (findName && json[id].find(x => x.name == input).bought) alreadyBought()
             }
 
             if (findName) {
@@ -207,7 +247,7 @@ const commands = {
 
                     saveJson()
 
-                    process.stdout.write('\x1Bc');
+                    process.stdout.write('\x1Bc'); 
                     console.log(`Bought ${findName.name}.`)
                     state = "input"
                     promptForCommand()
@@ -234,7 +274,7 @@ const commands = {
   },
   stats: () => {
     console.log(`money: ${json.money}`)
-    console.log(`xp: ${barGraph(json.xp, levelXp[json.level], [{text: ` Level ${json.level}`, color: colors.red}])}`)
+    console.log(`xp: ${barGraph(levelXp[json.level] ? json.xp : "MAX", levelXp[json.level] ? levelXp[json.level] : "MAX", [{text: ` Level ${json.level}`, color: colors.red}])}`)
 
     console.log("")
   },
@@ -279,6 +319,37 @@ const commands = {
         saveJson()
     }
   },
+  workers: (args) => {
+    if (!args[0]) {
+        console.log("Not a valid worker, dont know what workers are? run 'help workers'")
+        console.log("")
+
+        return;
+    }
+
+    if (json.workers.find(x => x.name == args[0]).bought) {
+        state = "workers"
+        args.push("worker")
+        console.log("Press enter to stop the worker.")
+        const interval = setInterval(async () => {
+            hack(args)
+        }, 2000)
+
+        rl.on('line', (input) => {
+            clearInterval(interval)
+
+            process.stdout.write('\x1Bc'); 
+            state = "input"
+            promptForCommand()
+        })
+
+    } else {
+        console.log("You dont own that worker, buy them at the shop.")
+        console.log("")
+
+        return;
+    }
+  },
   help: (args) => {
     if (!args[0]) {
         Object.keys(commands).forEach(cmd => console.log('- ', cmd));
@@ -286,7 +357,7 @@ const commands = {
         console.log(' ')
     } else {
         if (Object.keys(commands).find(x => x == args[0])) {
-            console.log(args[0])
+            console.log(`${colors.bgBlack} ${args[0]} ${colors.reset}`)
             console.log(commandHelp[args[0]])
             console.log("")
         } else {
@@ -307,20 +378,21 @@ function checkLevel() {
 }
 
 function barGraph(value, max, additional) {
-    "■#"
-
     var text = "[ "
     const bars = 20
+    var amount = Math.round(value / (max / bars))
 
-    const p = max / bars
-    const amount = Math.round(value / p)
+    var percentage = ` ${colors.blue}${Math.floor((value / max) * 100)}%${colors.reset}`
+    var of = ` ${colors.yellow}${value}/${max}${colors.reset}`
+
+    if (value == "MAX") {
+        amount = bars
+        percentage = ` ${colors.blue}100%${colors.reset}`
+    }
 
     for (var x = 0; x < amount; x++) text += "█"
     for (var x = 0; x < bars - amount; x++) text+= " "
     text += " ]"
-
-    const percentage = ` ${colors.blue}${(value / max) * 100}%${colors.reset}`
-    const of = ` ${colors.yellow}${value}/${max}${colors.reset}`
 
     text += percentage + of
 
